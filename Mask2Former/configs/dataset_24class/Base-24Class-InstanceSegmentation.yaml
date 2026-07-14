@@ -81,4 +81,4 @@ INPUT:
 TEST:
   EVAL_PERIOD: 1000
 
-OUTPUT_DIR: "/data/project_m2f/temp_data/24class_output"
+OUTPUT_DIR: "/data/m2f/temp_data/24class_output"
