@@ -12,7 +12,7 @@ __pycache__/
 # 模型权重文件
 *.pth
 *.pkl
-
+pretrained/
 # 构建产物
 build/
 *.egg-info/
