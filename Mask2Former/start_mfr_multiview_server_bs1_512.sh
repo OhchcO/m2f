@@ -9,7 +9,12 @@ conda activate "${CONDA_ENV}"
 cd "$(dirname "$0")"
 
 export MFR_MULTIVIEW_DATASET="${MFR_MULTIVIEW_DATASET:-/data/m2f/temp_data/multiview_feature_dataset}"
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-${GPU_ID:-0}}"
+
+echo "Using CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
+if command -v nvidia-smi >/dev/null 2>&1; then
+  nvidia-smi
+fi
 
 PRETRAIN_WEIGHTS="${PRETRAIN_WEIGHTS:-/data/m2f/pretrained/maskformer2_R50_coco_instance.pkl}"
 if [ ! -s "${PRETRAIN_WEIGHTS}" ]; then
