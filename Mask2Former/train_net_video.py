@@ -45,6 +45,7 @@ from detectron2.utils.logger import setup_logger
 # MaskFormer
 from mask2former import add_maskformer2_config
 from mask2former_video import (
+    MFRMultiViewDatasetMapper,
     YTVISDatasetMapper,
     YTVISEvaluator,
     add_maskformer2_video_config,
@@ -71,12 +72,18 @@ class Trainer(DefaultTrainer):
             output_folder = os.path.join(cfg.OUTPUT_DIR, "inference")
             os.makedirs(output_folder, exist_ok=True)
 
+        if MetadataCatalog.get(dataset_name).evaluator_type == "mfr_multiview":
+            return DatasetEvaluator()
+
         return YTVISEvaluator(dataset_name, cfg, True, output_folder)
 
     @classmethod
     def build_train_loader(cls, cfg):
         dataset_name = cfg.DATASETS.TRAIN[0]
-        mapper = YTVISDatasetMapper(cfg, is_train=True)
+        if cfg.INPUT.DATASET_MAPPER_NAME == "mfr_multiview":
+            mapper = MFRMultiViewDatasetMapper(cfg, is_train=True)
+        else:
+            mapper = YTVISDatasetMapper(cfg, is_train=True)
 
         dataset_dict = get_detection_dataset_dicts(
             dataset_name,
@@ -89,7 +96,10 @@ class Trainer(DefaultTrainer):
     @classmethod
     def build_test_loader(cls, cfg, dataset_name):
         dataset_name = cfg.DATASETS.TEST[0]
-        mapper = YTVISDatasetMapper(cfg, is_train=False)
+        if cfg.INPUT.DATASET_MAPPER_NAME == "mfr_multiview":
+            mapper = MFRMultiViewDatasetMapper(cfg, is_train=False)
+        else:
+            mapper = YTVISDatasetMapper(cfg, is_train=False)
         return build_detection_test_loader(cfg, dataset_name, mapper=mapper)
 
     @classmethod

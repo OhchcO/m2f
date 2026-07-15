@@ -1,0 +1,31 @@
+_BASE_: ../youtubevis_2021/video_maskformer2_R50_bs16_8ep.yaml
+MODEL:
+  WEIGHTS: ""
+  META_ARCHITECTURE: "VideoMaskFormer"
+  SEM_SEG_HEAD:
+    NUM_CLASSES: 24
+  MASK_FORMER:
+    TRANSFORMER_DECODER_NAME: "VideoMultiScaleMaskedTransformerDecoder"
+DATASETS:
+  TRAIN: ("mfr_multiview_train",)
+  TEST: ("mfr_multiview_val",)
+INPUT:
+  DATASET_MAPPER_NAME: "mfr_multiview"
+  SAMPLING_FRAME_NUM: 14
+  SAMPLING_FRAME_RANGE: 0
+  SAMPLING_FRAME_SHUFFLE: False
+  MIN_SIZE_TRAIN: (512,)
+  MIN_SIZE_TRAIN_SAMPLING: "choice_by_clip"
+  MIN_SIZE_TEST: 512
+  RANDOM_FLIP: "none"
+  FORMAT: "RGB"
+SOLVER:
+  IMS_PER_BATCH: 1
+  BASE_LR: 0.00005
+  MAX_ITER: 8000
+  STEPS: (5500,)
+TEST:
+  EVAL_PERIOD: 0
+DATALOADER:
+  FILTER_EMPTY_ANNOTATIONS: False
+  NUM_WORKERS: 4

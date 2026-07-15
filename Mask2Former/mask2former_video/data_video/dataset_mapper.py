@@ -21,7 +21,7 @@ from detectron2.data import transforms as T
 
 from .augmentation import build_augmentation
 
-__all__ = ["YTVISDatasetMapper", "CocoClipDatasetMapper"]
+__all__ = ["YTVISDatasetMapper", "CocoClipDatasetMapper", "MFRMultiViewDatasetMapper"]
 
 
 def filter_empty_instances(instances, by_box=True, by_mask=True, box_threshold=1e-5):
@@ -63,6 +63,30 @@ def _get_dummy_anno(num_classes):
         "bbox_mode": BoxMode.XYXY_ABS,
         "segmentation": [np.array([0.0] * 6)]
     }
+
+
+def mfr_annotations_to_instances(features, face_id_map, image_size):
+    masks = []
+    classes = []
+    ids = []
+
+    for feature in features:
+        mask = np.isin(face_id_map, feature["face_ids"])
+        masks.append(torch.from_numpy(np.ascontiguousarray(mask)))
+        classes.append(int(feature["category_id"]))
+        ids.append(int(feature["id"]) if mask.any() else -1)
+
+    target = Instances(image_size)
+    if masks:
+        target.gt_masks = BitMasks(torch.stack(masks).bool())
+        target.gt_boxes = target.gt_masks.get_bounding_boxes()
+    else:
+        target.gt_masks = BitMasks(torch.empty((0, *image_size), dtype=torch.bool))
+        target.gt_boxes = Boxes(torch.empty((0, 4), dtype=torch.float32))
+
+    target.gt_classes = torch.tensor(classes, dtype=torch.int64)
+    target.gt_ids = torch.tensor(ids, dtype=torch.int64)
+    return target
 
 
 def ytvis_annotations_to_instances(annos, image_size):
@@ -266,6 +290,85 @@ class YTVISDatasetMapper:
                 instances.gt_masks = BitMasks(torch.empty((0, *image_shape)))
             dataset_dict["instances"].append(instances)
 
+        return dataset_dict
+
+
+class MFRMultiViewDatasetMapper:
+    """
+    Mapper for CAD multi-view feature-instance data.
+
+    It treats the fixed 14 rendered views as the video dimension expected by
+    VideoMaskFormer. Masks are generated on the fly from per-view face_id_maps
+    and model-level feature face_ids.
+    """
+
+    @configurable
+    def __init__(
+        self,
+        is_train: bool,
+        *,
+        augmentations: List[Union[T.Augmentation, T.Transform]],
+        image_format: str,
+        sampling_frame_num: int = 14,
+    ):
+        self.is_train = is_train
+        self.augmentations = T.AugmentationList(augmentations)
+        self.image_format = image_format
+        self.sampling_frame_num = sampling_frame_num
+
+        logger = logging.getLogger(__name__)
+        mode = "training" if is_train else "inference"
+        logger.info(f"[MFRMultiViewDatasetMapper] Augmentations used in {mode}: {augmentations}")
+
+    @classmethod
+    def from_config(cls, cfg, is_train: bool = True):
+        augs = build_augmentation(cfg, is_train)
+        return {
+            "is_train": is_train,
+            "augmentations": augs,
+            "image_format": cfg.INPUT.FORMAT,
+            "sampling_frame_num": cfg.INPUT.SAMPLING_FRAME_NUM,
+        }
+
+    def __call__(self, dataset_dict):
+        dataset_dict = copy.deepcopy(dataset_dict)
+
+        file_names = dataset_dict.pop("file_names")
+        face_id_map_names = dataset_dict.pop("face_id_map_names")
+        features = dataset_dict.pop("features")
+
+        paired_views = list(zip(file_names, face_id_map_names))
+        paired_views = sorted(paired_views, key=lambda item: item[0])
+        if self.is_train:
+            paired_views = paired_views[: self.sampling_frame_num]
+
+        dataset_dict["image"] = []
+        dataset_dict["instances"] = []
+        dataset_dict["file_names"] = []
+        dataset_dict["face_id_map_names"] = []
+
+        for image_path, face_id_map_path in paired_views:
+            image = utils.read_image(image_path, format=self.image_format)
+            # Detectron2's ResizeTransform uses torch.interpolate for non-uint8
+            # segmentations, and PyTorch does not support nearest resize for int
+            # tensors. Keep ids as float during augmentation, then convert back.
+            face_id_map = np.load(face_id_map_path).astype(np.float32)
+            utils.check_image_size(dataset_dict, image)
+
+            aug_input = T.AugInput(image, sem_seg=face_id_map)
+            self.augmentations(aug_input)
+            image = aug_input.image
+            face_id_map = np.rint(aug_input.sem_seg).astype(np.int32)
+
+            image_shape = image.shape[:2]
+            instances = mfr_annotations_to_instances(features, face_id_map, image_shape)
+
+            dataset_dict["image"].append(torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1))))
+            dataset_dict["instances"].append(instances)
+            dataset_dict["file_names"].append(image_path)
+            dataset_dict["face_id_map_names"].append(face_id_map_path)
+
+        dataset_dict["length"] = len(dataset_dict["image"])
         return dataset_dict
 
 

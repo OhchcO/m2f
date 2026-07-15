@@ -8,6 +8,10 @@ from .ytvis import (
     _get_ytvis_2019_instances_meta,
     _get_ytvis_2021_instances_meta,
 )
+from .mfr_multiview import (
+    get_mfr_multiview_instances_meta,
+    register_mfr_multiview_instances,
+)
 
 # ==== Predefined splits for YTVIS 2019 ===========
 _PREDEFINED_SPLITS_YTVIS_2019 = {
@@ -53,8 +57,23 @@ def register_all_ytvis_2021(root):
         )
 
 
+def register_all_mfr_multiview(root):
+    for split in ("train", "val"):
+        split_root = os.path.join(root, split)
+        models_json = os.path.join(split_root, "models.json")
+        if not os.path.isfile(models_json):
+            continue
+        register_mfr_multiview_instances(
+            f"mfr_multiview_{split}",
+            get_mfr_multiview_instances_meta(),
+            models_json,
+            split_root,
+        )
+
+
 if __name__.endswith(".builtin"):
     # Assume pre-defined datasets live in `./datasets`.
     _root = os.getenv("DETECTRON2_DATASETS", "datasets")
     register_all_ytvis_2019(_root)
     register_all_ytvis_2021(_root)
+    register_all_mfr_multiview(os.getenv("MFR_MULTIVIEW_DATASET", "/data/m2f/temp_data/multiview_feature_dataset"))
