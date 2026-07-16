@@ -38,8 +38,6 @@ from mask2former_video import add_maskformer2_video_config  # noqa: F401
 
 sys.path.insert(0, os.path.dirname(__file__))
 from eval_area_metrics import (  # noqa: E402
-    MANUAL_COARSE_CLASS_NAMES,
-    MANUAL_FINE_TO_COARSE_CLASS,
     compute_metrics,
     print_report,
     remap_results_for_coarse_eval,
@@ -71,6 +69,44 @@ MFR_CLASS_NAMES = {
     21: "circular_blind_step",
     22: "rectangular_blind_step",
     23: "round",
+}
+
+MFR_COARSE_CLASS_NAMES = {
+    0: "chamfer",
+    1: "hole",
+    2: "closed_pocket",
+    3: "closed_slot",
+    4: "open_pocket",
+    5: "open_slot",
+    6: "wide_slot",
+    7: "oring_slot",
+}
+
+MFR_FINE_TO_COARSE_CLASS = {
+    0: 0,   # chamfer -> chamfer
+    1: 1,   # through_hole -> hole
+    2: 4,   # triangular_passage -> open_pocket
+    3: 4,   # rectangular_passage -> open_pocket
+    4: 4,   # 6sides_passage -> open_pocket
+    5: 5,   # triangular_through_slot -> open_slot
+    6: 5,   # rectangular_through_slot -> open_slot
+    7: 5,   # circular_through_slot -> open_slot
+    8: 6,   # rectangular_through_step -> wide_slot
+    9: 6,   # 2sides_through_step -> wide_slot
+    10: 6,  # slanted_through_step -> wide_slot
+    11: 7,  # Oring -> oring_slot
+    12: 1,  # blind_hole -> hole
+    13: 2,  # triangular_pocket -> closed_pocket
+    14: 2,  # rectangular_pocket -> closed_pocket
+    15: 2,  # 6sides_pocket -> closed_pocket
+    16: 2,  # circular_end_pocket -> closed_pocket
+    17: 3,  # rectangular_blind_slot -> closed_slot
+    18: 3,  # v_circular_end_blind_slot -> closed_slot
+    19: 3,  # h_circular_end_blind_slot -> closed_slot
+    20: 2,  # triangular_blind_step -> closed_pocket
+    21: 2,  # circular_blind_step -> closed_pocket
+    22: 2,  # rectangular_blind_step -> closed_pocket
+    23: 1,  # round -> hole
 }
 
 
@@ -347,11 +383,11 @@ def main():
         saved_paths.append(save_eval_outputs(args.output_dir, fine_metrics, MFR_CLASS_NAMES, all_results, suffix))
 
     if args.eval_class_mode in ("coarse", "both"):
-        coarse_results = remap_results_for_coarse_eval(all_results, MANUAL_FINE_TO_COARSE_CLASS)
-        coarse_metrics = compute_metrics(coarse_results, MANUAL_COARSE_CLASS_NAMES)
-        print_report(coarse_metrics, MANUAL_COARSE_CLASS_NAMES, "MFR multiview coarse face-level report")
+        coarse_results = remap_results_for_coarse_eval(all_results, MFR_FINE_TO_COARSE_CLASS)
+        coarse_metrics = compute_metrics(coarse_results, MFR_COARSE_CLASS_NAMES)
+        print_report(coarse_metrics, MFR_COARSE_CLASS_NAMES, "MFR multiview coarse face-level report")
         suffix = "coarse" if args.eval_class_mode == "both" else ""
-        saved_paths.append(save_eval_outputs(args.output_dir, coarse_metrics, MANUAL_COARSE_CLASS_NAMES, coarse_results, suffix))
+        saved_paths.append(save_eval_outputs(args.output_dir, coarse_metrics, MFR_COARSE_CLASS_NAMES, coarse_results, suffix))
 
     print("\n结果已保存:")
     for metrics_path, csv_path, detail_path in saved_paths:

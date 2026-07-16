@@ -4,7 +4,7 @@
 set -e
 
 eval "$(conda shell.bash hook)"
-conda activate mask2former
+conda activate m2f
 
 PROJECT_DIR="/data/m2f"
 MASK2FORMER_DIR="${PROJECT_DIR}/Mask2Former"

@@ -251,7 +251,7 @@ def get_cube_14_view_directions():
 # ============================================================
 # 单模型处理
 # ============================================================
-def process_single_model(label_path, step_path, face_labels, features, out_dir):
+def process_single_model(label_path, step_path, face_labels, features, out_dir, output_width, output_height):
     model_name = os.path.splitext(os.path.basename(label_path))[0]
 
     reader = STEPControl_Reader()
@@ -314,7 +314,7 @@ def process_single_model(label_path, step_path, face_labels, features, out_dir):
     os.makedirs(encoded_dir, exist_ok=True)
     os.makedirs(face_map_dir, exist_ok=True)
 
-    plotter = pv.Plotter(off_screen=True, window_size=(OUTPUT_WIDTH, OUTPUT_HEIGHT))
+    plotter = pv.Plotter(off_screen=True, window_size=(output_width, output_height))
     plotter.disable_anti_aliasing()
     plotter.camera.SetParallelProjection(True)
     plotter.add_mesh(face_meshes[0], color='white')
@@ -324,7 +324,7 @@ def process_single_model(label_path, step_path, face_labels, features, out_dir):
 
     camera_records = {}
     view_records = []
-    aspect_ratio = OUTPUT_WIDTH / OUTPUT_HEIGHT
+    aspect_ratio = output_width / output_height
 
     for view_id, direction in enumerate(directions):
         viewup = get_viewup(direction)
@@ -393,10 +393,10 @@ def process_single_model(label_path, step_path, face_labels, features, out_dir):
 # 多进程 worker
 # ============================================================
 def _worker(args):
-    label_path, step_path, face_labels, features, out_dir, idx, total = args
+    label_path, step_path, face_labels, features, out_dir, output_width, output_height, idx, total = args
     t0 = time.time()
     try:
-        result = process_single_model(label_path, step_path, face_labels, features, out_dir)
+        result = process_single_model(label_path, step_path, face_labels, features, out_dir, output_width, output_height)
         elapsed = time.time() - t0
         model_name = os.path.splitext(os.path.basename(label_path))[0]
         return (True, model_name, result, elapsed, idx, total)
@@ -441,6 +441,8 @@ def parse_args():
     parser.add_argument("--num-val", type=int, default=NUM_VAL)
     parser.add_argument("--seed", type=int, default=RANDOM_SEED)
     parser.add_argument("--num-workers", type=int, default=NUM_WORKERS)
+    parser.add_argument("--width", type=int, default=OUTPUT_WIDTH)
+    parser.add_argument("--height", type=int, default=OUTPUT_HEIGHT)
     parser.add_argument("--include-stock", action="store_true")
     return parser.parse_args()
 
@@ -453,6 +455,7 @@ def main():
     print(f"输入: {args.input_dir}")
     print(f"输出: {args.output_dir}")
     print(f"划分: train={args.num_train}, val={args.num_val}")
+    print(f"分辨率: {args.width}x{args.height}")
     print("=" * 60)
 
     # ---- 读取数据目录 ----
@@ -530,7 +533,7 @@ def main():
 
         tasks = []
         for idx, (label_path, step_path, face_labels, features) in enumerate(split_models):
-            tasks.append((label_path, step_path, face_labels, features, split_out, idx, total))
+            tasks.append((label_path, step_path, face_labels, features, split_out, args.width, args.height, idx, total))
 
         all_camera = {}
         all_models = []

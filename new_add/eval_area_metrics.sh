@@ -5,7 +5,7 @@
 set -e
 
 PROJECT_DIR="/data/m2f"
-CONDA_ENV="mask2former"
+CONDA_ENV="m2f"
 
 VAL_DIR="${PROJECT_DIR}/temp_data/dataset_24class/val"
 CONFIG_FILE="${PROJECT_DIR}/Mask2Former/configs/dataset_24class/Base-24Class-InstanceSegmentation.yaml"

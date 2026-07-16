@@ -42,6 +42,7 @@ class VideoMaskFormer(nn.Module):
         sem_seg_postprocess_before_inference: bool,
         pixel_mean: Tuple[float],
         pixel_std: Tuple[float],
+        test_topk_per_video: int,
         # video
         num_frames,
     ):
@@ -84,6 +85,7 @@ class VideoMaskFormer(nn.Module):
         self.sem_seg_postprocess_before_inference = sem_seg_postprocess_before_inference
         self.register_buffer("pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False)
         self.register_buffer("pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1), False)
+        self.test_topk_per_video = test_topk_per_video
 
         self.num_frames = num_frames
 
@@ -143,6 +145,7 @@ class VideoMaskFormer(nn.Module):
             "sem_seg_postprocess_before_inference": True,
             "pixel_mean": cfg.MODEL.PIXEL_MEAN,
             "pixel_std": cfg.MODEL.PIXEL_STD,
+            "test_topk_per_video": cfg.MODEL.MASK_FORMER.TEST.TOPK_PER_VIDEO,
             # video
             "num_frames": cfg.INPUT.SAMPLING_FRAME_NUM,
         }
@@ -256,8 +259,9 @@ class VideoMaskFormer(nn.Module):
         if len(pred_cls) > 0:
             scores = F.softmax(pred_cls, dim=-1)[:, :-1]
             labels = torch.arange(self.sem_seg_head.num_classes, device=self.device).unsqueeze(0).repeat(self.num_queries, 1).flatten(0, 1)
-            # keep top-10 predictions
-            scores_per_image, topk_indices = scores.flatten(0, 1).topk(10, sorted=False)
+            # keep top-k predictions
+            topk = min(self.test_topk_per_video, scores.numel())
+            scores_per_image, topk_indices = scores.flatten(0, 1).topk(topk, sorted=False)
             labels_per_image = labels[topk_indices]
             topk_indices = topk_indices // self.sem_seg_head.num_classes
             pred_masks = pred_masks[topk_indices]

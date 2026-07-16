@@ -24,6 +24,7 @@ inference_output/
 results/
 eval_balanced_output/
 output/
+result/
 
 # 编辑器临时文件
 *.swp

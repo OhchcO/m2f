@@ -6,7 +6,7 @@ set -e
 
 # 激活 conda 环境
 eval "$(conda shell.bash hook)"
-conda activate mask2former
+conda activate m2f
 
 # 项目路径
 PROJECT_DIR="/data/m2f"

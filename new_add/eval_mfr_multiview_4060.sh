@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONDA_ENV="${CONDA_ENV:-mask2former}"
+CONDA_ENV="${CONDA_ENV:-m2f}"
 PROJECT_DIR="/data/m2f"
 
 eval "$(conda shell.bash hook)"
@@ -24,3 +24,7 @@ python "${PROJECT_DIR}/new_add/eval_mfr_multiview.py" \
   --output_dir "${OUTPUT_DIR}" \
   --min_size_test 256 \
   --eval_class_mode both
+
+
+#  跑其他权重的评估结果：WEIGHTS、OUTPUT_DIR、CONFIG_FILE
+#  WEIGHTS=/data/m2f/temp_data/mfr_multiview_server_bs1_512_output/model_final.pth OUTPUT_DIR=/data/m2f/temp_data/eval_mfr_multiview_server_bs1_512 ./new_add/eval_mfr_multiview_4060.sh

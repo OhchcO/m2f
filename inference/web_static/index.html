@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MFR 多视角推理可视化</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="panel">
+        <div class="brand">
+          <h1>MFR 多视角推理</h1>
+          <span id="statusBadge">未加载</span>
+        </div>
+
+        <label>STEP 文件</label>
+        <input id="stepFile" type="file" accept=".step,.stp" hidden />
+        <button id="chooseFileBtn">选择 STEP/STP 文件</button>
+
+        <label>STEP 路径</label>
+        <div class="row">
+          <input id="stepPath" placeholder="/data/xxx/model.step" />
+          <button id="loadBtn">加载路径</button>
+        </div>
+
+        <label>权重 .pth</label>
+        <input id="weightsPath" />
+
+        <label>配置 YAML</label>
+        <input id="configPath" />
+
+        <label>Mask2Former 根目录</label>
+        <input id="m2fRoot" />
+
+        <div class="grid">
+          <div>
+            <label>设备</label>
+            <input id="device" />
+          </div>
+          <div>
+            <label>Score</label>
+            <input id="scoreThreshold" type="number" min="0" max="1" step="0.05" />
+          </div>
+          <div>
+            <label>Face 占比</label>
+            <input id="minRatio" type="number" min="0" max="1" step="0.05" />
+          </div>
+          <div>
+            <label>最小面像素</label>
+            <input id="minFaceArea" type="number" min="1" step="1" />
+          </div>
+        </div>
+
+        <label>输出目录</label>
+        <input id="outputDir" placeholder="留空则写入 /tmp/m2f_web_xxx" />
+
+        <button id="runBtn" disabled>开始推理</button>
+
+        <section class="summary">
+          <h2>结果统计</h2>
+          <div id="summaryList" class="summary-list"></div>
+        </section>
+
+        <section class="logbox">
+          <h2>日志</h2>
+          <pre id="logs"></pre>
+        </section>
+      </aside>
+
+      <section class="viewport">
+        <canvas id="glCanvas"></canvas>
+        <div class="hud">
+          <button id="resetViewBtn" title="重置视角">⟲</button>
+          <span id="meshInfo">等待 STEP</span>
+        </div>
+        <div id="faceTooltip" class="tooltip hidden"></div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

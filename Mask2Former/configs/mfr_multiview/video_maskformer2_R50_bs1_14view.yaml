@@ -6,6 +6,8 @@ MODEL:
     NUM_CLASSES: 24
   MASK_FORMER:
     TRANSFORMER_DECODER_NAME: "VideoMultiScaleMaskedTransformerDecoder"
+    TEST:
+      TOPK_PER_VIDEO: 50
 DATASETS:
   TRAIN: ("mfr_multiview_train",)
   TEST: ("mfr_multiview_val",)
