@@ -1,0 +1,5 @@
+1.  克隆代码库 https://gitee.com/o-huchi-huchi-o/m2f.git
+2.  用yml创建基础conda环境
+    conda env create -f m2f_env.yml
+    conda activate m2f
+3.  

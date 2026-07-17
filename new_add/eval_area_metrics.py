@@ -80,6 +80,33 @@ CLASS_NAMES_24 = {
     22: "round",
 }
 
+CLASS_NAMES_AAG_24 = {
+    0: "chamfer",
+    1: "through_hole",
+    2: "triangular_passage",
+    3: "rectangular_passage",
+    4: "6sides_passage",
+    5: "triangular_through_slot",
+    6: "rectangular_through_slot",
+    7: "circular_through_slot",
+    8: "rectangular_through_step",
+    9: "2sides_through_step",
+    10: "slanted_through_step",
+    11: "Oring",
+    12: "blind_hole",
+    13: "triangular_pocket",
+    14: "rectangular_pocket",
+    15: "6sides_pocket",
+    16: "circular_end_pocket",
+    17: "rectangular_blind_slot",
+    18: "v_circular_end_blind_slot",
+    19: "h_circular_end_blind_slot",
+    20: "triangular_blind_step",
+    21: "circular_blind_step",
+    22: "rectangular_blind_step",
+    23: "round",
+}
+
 # 手动粗分类映射。左侧是模型/GT 的细分类 ID，右侧是评估用粗分类 ID。
 # 这里先给出一版默认映射，实际项目里可以直接改这个字典。
 MANUAL_COARSE_CLASS_NAMES = {
@@ -116,6 +143,32 @@ MANUAL_FINE_TO_COARSE_CLASS = {
     20: 1,  # circular_blind_step -> closed_pocket
     21: 1,  # rectangular_blind_step -> closed_pocket
     22: 0,  # round -> hole
+}
+
+AAG_FINE_TO_COARSE_CLASS = {
+    1: 0,   # through_hole -> hole
+    2: 3,   # triangular_passage -> open_pocket
+    3: 3,   # rectangular_passage -> open_pocket
+    4: 3,   # 6sides_passage -> open_pocket
+    5: 4,   # triangular_through_slot -> open_slot
+    6: 4,   # rectangular_through_slot -> open_slot
+    7: 4,   # circular_through_slot -> open_slot
+    8: 5,   # rectangular_through_step -> wide_slot
+    9: 5,   # 2sides_through_step -> wide_slot
+    10: 5,  # slanted_through_step -> wide_slot
+    11: 6,  # Oring -> oring_slot
+    12: 0,  # blind_hole -> hole
+    13: 1,  # triangular_pocket -> closed_pocket
+    14: 1,  # rectangular_pocket -> closed_pocket
+    15: 1,  # 6sides_pocket -> closed_pocket
+    16: 1,  # circular_end_pocket -> closed_pocket
+    17: 2,  # rectangular_blind_slot -> closed_slot
+    18: 2,  # v_circular_end_blind_slot -> closed_slot
+    19: 2,  # h_circular_end_blind_slot -> closed_slot
+    20: 1,  # triangular_blind_step -> closed_pocket
+    21: 1,  # circular_blind_step -> closed_pocket
+    22: 1,  # rectangular_blind_step -> closed_pocket
+    23: 0,  # round -> hole
 }
 
 COLOR_PALETTE = [
@@ -299,6 +352,44 @@ def build_gt_from_mask_and_classmap(mask, class_map):
     return gt_faces
 
 
+def normalize_class_map(raw_class_map, image_files=None):
+    """Support both legacy image-keyed maps and AAG model/gray-value maps."""
+    if not raw_class_map:
+        return raw_class_map
+
+    first_value = next(iter(raw_class_map.values()))
+    if not (isinstance(first_value, dict) and {"model_name", "gray_value", "class_id"} <= set(first_value)):
+        return raw_class_map
+
+    by_model = {}
+    for item in raw_class_map.values():
+        model_name = item["model_name"]
+        gray_value = str(int(item["gray_value"]))
+        class_id = int(item["class_id"])
+        by_model.setdefault(model_name, {})[gray_value] = class_id
+
+    if image_files is None:
+        return by_model
+
+    normalized = {}
+    for image_file in image_files:
+        model_name = image_file.rsplit("_", 1)[0]
+        normalized[image_file] = by_model.get(model_name, {})
+    return normalized
+
+
+def normalize_legacy_24_class_ids(class_map):
+    """dataset_24class trains original labels 1..23 as model labels 0..22."""
+    normalized = {}
+    for image_name, instances in class_map.items():
+        normalized[image_name] = {}
+        for seq_str, cat_id in instances.items():
+            cat_id = int(cat_id)
+            if 1 <= cat_id <= 23:
+                normalized[image_name][seq_str] = cat_id - 1
+    return normalized
+
+
 def evaluate_single(gt_faces, pred_mask, pred_classes):
     """
     评估单张图的面级别结果。
@@ -385,10 +476,14 @@ def infer_fine_class_names(cfg, label_set):
         return CLASS_NAMES_7
     if label_set == "24":
         return CLASS_NAMES_24
+    if label_set == "aag24":
+        return CLASS_NAMES_AAG_24
 
     num_classes = int(cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES)
     if num_classes == 23:
         return CLASS_NAMES_24
+    if num_classes == 24:
+        return CLASS_NAMES_AAG_24
     if num_classes == 7:
         return CLASS_NAMES_7
 
@@ -547,7 +642,7 @@ def main():
                         help="实例置信度阈值")
     parser.add_argument("--weights", type=str, default=None,
                         help="模型权重路径 (覆盖配置文件中的 MODEL.WEIGHTS)")
-    parser.add_argument("--label_set", choices=["auto", "7", "24"], default="auto",
+    parser.add_argument("--label_set", choices=["auto", "7", "24", "aag24"], default="auto",
                         help="细分类标签集。auto 会根据配置中的 NUM_CLASSES 判断")
     parser.add_argument("--eval_class_mode", choices=["fine", "coarse", "both"], default="fine",
                         help="fine=按模型原始类别评估，coarse=按手动映射后类别评估，both=同时输出")
@@ -558,16 +653,7 @@ def main():
     class_map_path = os.path.join(args.val_dir, "class_map.json")
     print(f"加载 class_map: {class_map_path}")
     with open(class_map_path, "r", encoding="utf-8") as f:
-        class_map = json.load(f)
-
-    # class_map 格式: {图片名: {序号: 类别ID}}
-    # 需要展平为 {(图片名, 序号): 类别ID}
-    flat_class_map = {}
-    for img_name, instances in class_map.items():
-        for seq_str, cat_id in instances.items():
-            flat_class_map[(img_name, seq_str)] = cat_id
-
-    print(f"  图片数: {len(class_map)}")
+        raw_class_map = json.load(f)
 
     # 配置模型
     cfg = setup_cfg(args.config_file)
@@ -577,7 +663,7 @@ def main():
         cfg.freeze()
     fine_class_names = infer_fine_class_names(cfg, args.label_set)
     coarse_class_names = MANUAL_COARSE_CLASS_NAMES
-    fine_to_coarse = MANUAL_FINE_TO_COARSE_CLASS
+    fine_to_coarse = AAG_FINE_TO_COARSE_CLASS if args.label_set == "aag24" else MANUAL_FINE_TO_COARSE_CLASS
 
     print(f"模型权重: {cfg.MODEL.WEIGHTS}")
     print(f"细分类类别数: {len(fine_class_names)}")
@@ -601,6 +687,10 @@ def main():
         return
 
     print(f"验证集图片数: {len(image_files)}")
+    class_map = normalize_class_map(raw_class_map, image_files)
+    if args.label_set == "24":
+        class_map = normalize_legacy_24_class_ids(class_map)
+    print(f"  图片数: {len(class_map)}")
     os.makedirs(args.output_dir, exist_ok=True)
 
     # 创建推理结果保存目录
@@ -635,6 +725,7 @@ def main():
 
         # 构建 GT 面信息
         gt_faces = build_gt_from_mask_and_classmap(gt_mask, img_class_map)
+        gt_faces = [gt for gt in gt_faces if int(gt["category_id"]) in fine_class_names]
         if len(gt_faces) == 0:
             continue
 

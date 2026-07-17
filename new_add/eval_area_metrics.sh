@@ -9,8 +9,8 @@ CONDA_ENV="m2f"
 
 VAL_DIR="${PROJECT_DIR}/temp_data/dataset_24class/val"
 CONFIG_FILE="${PROJECT_DIR}/Mask2Former/configs/dataset_24class/Base-24Class-InstanceSegmentation.yaml"
-WEIGHTS="${PROJECT_DIR}/temp_data/24class_output/model_final.pth"
-OUTPUT_DIR="${PROJECT_DIR}/temp_data/eval_area_metrics_24class"
+WEIGHTS="/mnt/e/wsl/result/24class_output/model_final.pth"
+OUTPUT_DIR="/mnt/e/wsl/result/eval_area_metrics_dataset_24class_single200"
 
 THRESHOLD="0.5"
 LABEL_SET="24"

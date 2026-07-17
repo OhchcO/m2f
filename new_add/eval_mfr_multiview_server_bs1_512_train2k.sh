@@ -4,12 +4,16 @@ set -euo pipefail
 CONDA_ENV="${CONDA_ENV:-m2f}"
 PROJECT_DIR="${PROJECT_DIR:-/data/m2f}"
 MASK2FORMER_DIR="${MASK2FORMER_DIR:-${PROJECT_DIR}/Mask2Former}"
-DATASET_DIR="${DATASET_DIR:-${PROJECT_DIR}/temp_data/multiview_feature_dataset_train2k_val100_512}"
-OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_DIR}/temp_data/eval_mfr_multiview_server_bs1_512_train2k}"
-WEIGHTS="${WEIGHTS:-${PROJECT_DIR}/temp_data/mfr_multiview_server_bs1_512_train2k_output/model_final.pth}"
+DATASET_DIR="${DATASET_DIR:-/mnt/e/wsl/datasets/MFRInstSegM2F_2100}"
+OUTPUT_DIR="${OUTPUT_DIR:-/mnt/e/wsl/result/eval_mfr_multiview_model_0059999}"
+WEIGHTS="${WEIGHTS:-/mnt/e/wsl/tmp/model_0059999.pth}"
 
 if [ ! -s "${WEIGHTS}" ]; then
   echo "[ERROR] Trained weights not found: ${WEIGHTS}"
+  exit 1
+fi
+if [ ! -s "${DATASET_DIR}/val/models.json" ]; then
+  echo "[ERROR] Dataset val/models.json not found under: ${DATASET_DIR}"
   exit 1
 fi
 
@@ -22,13 +26,11 @@ export MFR_MULTIVIEW_DATASET="${DATASET_DIR}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-${GPU_ID:-0}}"
 
 python "${PROJECT_DIR}/new_add/eval_mfr_multiview.py" \
-  --config-file configs/mfr_multiview/video_maskformer2_R50_bs1_14view.yaml \
+  --config_file "${MASK2FORMER_DIR}/configs/mfr_multiview/video_maskformer2_R50_bs1_14view.yaml" \
   --weights "${WEIGHTS}" \
-  --dataset-dir "${DATASET_DIR}" \
-  --split val \
-  --output-dir "${OUTPUT_DIR}" \
-  --score-threshold 0.3 \
-  --eval-class-mode both \
-  --opts \
-  INPUT.MIN_SIZE_TEST 512 \
-  MODEL.MASK_FORMER.NUM_OBJECT_QUERIES 100
+  --val_dir "${DATASET_DIR}/val" \
+  --output_dir "${OUTPUT_DIR}" \
+  --score_threshold 0.3 \
+  --min_size_test 512 \
+  --num_views 14 \
+  --eval_class_mode both

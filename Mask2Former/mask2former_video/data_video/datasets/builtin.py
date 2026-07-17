@@ -3,6 +3,8 @@
 
 import os
 
+from detectron2.data import DatasetCatalog
+
 from .ytvis import (
     register_ytvis_instances,
     _get_ytvis_2019_instances_meta,
@@ -58,17 +60,32 @@ def register_all_ytvis_2021(root):
 
 
 def register_all_mfr_multiview(root):
+    dataset_base = (
+        os.getenv("MFR_DATASET_NAME")
+        or os.getenv("MFR_MULTIVIEW_DATASET_NAME")
+        or os.path.basename(os.path.normpath(root))
+    )
+    prefix = f"{dataset_base}_multiview"
     for split in ("train", "val"):
         split_root = os.path.join(root, split)
         models_json = os.path.join(split_root, "models.json")
         if not os.path.isfile(models_json):
             continue
         register_mfr_multiview_instances(
-            f"mfr_multiview_{split}",
+            f"{prefix}_{split}",
             get_mfr_multiview_instances_meta(),
             models_json,
             split_root,
         )
+        legacy_name = f"mfr_multiview_{split}"
+        target_name = f"{prefix}_{split}"
+        if legacy_name != target_name and legacy_name not in DatasetCatalog.list():
+            register_mfr_multiview_instances(
+                legacy_name,
+                get_mfr_multiview_instances_meta(),
+                models_json,
+                split_root,
+            )
 
 
 if __name__.endswith(".builtin"):

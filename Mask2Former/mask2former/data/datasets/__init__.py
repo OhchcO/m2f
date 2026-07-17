@@ -16,8 +16,6 @@ _datasets_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "datas
 if os.path.isdir(_datasets_dir) and _datasets_dir not in sys.path:
     sys.path.insert(0, _datasets_dir)
 try:
-    import register_dataset_24class
-    import register_dataset_7class
-    import register_dataset_aag_24class
+    import register_mfr_singleview
 except ImportError:
     pass

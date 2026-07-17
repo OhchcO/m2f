@@ -25,7 +25,7 @@ import datetime
 import numpy as np
 from PIL import Image
 
-# 23个加工特征类别 (class_map 中 ID 1-23 → 这里 ID 0-22)
+# 23个加工特征类别 (class_map 中类别 ID 1-23 → 这里 ID 0-22)
 # class 0 (chamfer) 从未生成，class 24 (stock) 为 ignore
 CATEGORIES = [
     {"id": 0,  "name": "through_hole",                "supercategory": "feature_type"},
@@ -62,7 +62,7 @@ def mask_to_coco_annotations(mask: np.ndarray, class_map: dict, image_file: str)
     将实例掩码转换为 COCO 格式的标注。
 
     Args:
-        mask: 实例掩码 (H, W), 值为 0(背景), 1,2,...(实例), 255(忽略)
+        mask: 面实例掩码 (H, W), 值为 face_id(0,1,2...), 255(忽略/背景)
         class_map: 该图像的 {face_id_str: category_id} 映射
         image_file: 图像文件名
 
@@ -73,7 +73,7 @@ def mask_to_coco_annotations(mask: np.ndarray, class_map: dict, image_file: str)
 
     annotations = []
     instance_ids = np.unique(mask)
-    instance_ids = instance_ids[(instance_ids > 0) & (instance_ids < 255)]
+    instance_ids = instance_ids[(instance_ids >= 0) & (instance_ids < 255)]
 
     for instance_id in instance_ids:
         instance_id_int = int(instance_id)
@@ -86,12 +86,14 @@ def mask_to_coco_annotations(mask: np.ndarray, class_map: dict, image_file: str)
             continue
 
         # 获取类别 ID
-        face_id_str = str(instance_id_int - 1)
+        face_id_str = str(instance_id_int)
         if face_id_str not in class_map:
             continue
 
         # class_map 中的 ID 1-23 → COCO ID 0-22
-        category_id = class_map[face_id_str] - CLASS_MAP_OFFSET
+        category_id = int(class_map[face_id_str]) - CLASS_MAP_OFFSET
+        if category_id < 0 or category_id >= len(CATEGORIES):
+            continue
 
         # 计算边界框 [x, y, width, height]
         ys, xs = np.where(instance_mask > 0)
@@ -224,10 +226,14 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="balanced_dataset",
-                        help="数据集目录名")
+                        help="数据集目录名，兼容旧用法")
+    parser.add_argument("--dataset-dir", type=str, default=None,
+                        help="数据集根目录，包含 train/val 子目录；优先级高于 --dataset")
     args = parser.parse_args()
 
-    dataset_root = os.path.join(os.path.dirname(__file__), args.dataset)
+    dataset_root = args.dataset_dir
+    if dataset_root is None:
+        dataset_root = os.path.join(os.path.dirname(__file__), args.dataset)
 
     for split in ["train", "val"]:
         split_dir = os.path.join(dataset_root, split)
