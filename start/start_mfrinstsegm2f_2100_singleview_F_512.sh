@@ -14,6 +14,7 @@ MAX_ITER="${MAX_ITER:-}"
 CHECKPOINT_PERIOD="${CHECKPOINT_PERIOD:-}"
 EVAL_PERIOD="${EVAL_PERIOD:-0}"
 NUM_WORKERS="${NUM_WORKERS:-4}"
+RESUME="${RESUME:-0}"
 
 if [ ! -s "${DATASET_DIR}/train/models.json" ] || [ ! -s "${DATASET_DIR}/val/models.json" ]; then
   echo "[ERROR] Dataset models.json not found under: ${DATASET_DIR}"
@@ -56,7 +57,13 @@ if [ ! -s "${PRETRAIN_WEIGHTS}" ]; then
   exit 1
 fi
 
+RESUME_ARGS=()
+if [ "${RESUME}" = "1" ]; then
+  RESUME_ARGS=(--resume)
+fi
+
 python train_net.py \
+  "${RESUME_ARGS[@]}" \
   --config-file configs/mfr_singleview/maskformer2_R50_512.yaml \
   --num-gpus 1 \
   SOLVER.IMS_PER_BATCH "${IMS_PER_BATCH}" \

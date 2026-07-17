@@ -3,6 +3,9 @@
 
 import json
 import os
+import pickle
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -40,6 +43,8 @@ MFR_FEATURE_NAMES = [
     "round",
 ]
 
+SINGLEVIEW_CACHE_VERSION = 1
+
 
 def _dataset_basename(root):
     return os.path.basename(os.path.normpath(root))
@@ -58,76 +63,166 @@ def _encode_binary_mask(mask):
     return encoded
 
 
+def _cache_file_for(models_json):
+    return models_json.with_name(f".{models_json.stem}_singleview_cache_v{SINGLEVIEW_CACHE_VERSION}.pkl")
+
+
+def _cache_meta(models_json):
+    stat = models_json.stat()
+    return {
+        "version": SINGLEVIEW_CACHE_VERSION,
+        "models_json": str(models_json),
+        "mtime_ns": stat.st_mtime_ns,
+        "size": stat.st_size,
+    }
+
+
+def _load_cache(cache_file, expected_meta):
+    if not cache_file.is_file():
+        return None
+    try:
+        with cache_file.open("rb") as f:
+            payload = pickle.load(f)
+    except Exception as exc:
+        print(f"[WARNING] Failed to read single-view cache {cache_file}: {exc}", flush=True)
+        return None
+
+    if payload.get("meta") != expected_meta:
+        return None
+    return payload.get("dataset_dicts")
+
+
+def _save_cache(cache_file, expected_meta, dataset_dicts):
+    tmp_file = cache_file.with_suffix(cache_file.suffix + ".tmp")
+    try:
+        with tmp_file.open("wb") as f:
+            pickle.dump({"meta": expected_meta, "dataset_dicts": dataset_dicts}, f, protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(tmp_file, cache_file)
+        print(f"[OK] Saved MFR single-view cache: {cache_file}", flush=True)
+    except Exception as exc:
+        print(f"[WARNING] Failed to save single-view cache {cache_file}: {exc}", flush=True)
+        try:
+            tmp_file.unlink(missing_ok=True)
+        except TypeError:
+            if tmp_file.exists():
+                tmp_file.unlink()
+
+
+def _model_to_records(model, split_root):
+    features = []
+    for feature in model.get("features", []):
+        category_id = int(feature["category_id"])
+        if category_id >= len(MFR_FEATURE_NAMES):
+            continue
+        features.append(
+            {
+                "instance_id": int(feature["instance_id"]),
+                "category_id": category_id,
+                "face_ids": [int(face_id) for face_id in feature["face_ids"]],
+            }
+        )
+
+    records = []
+    for view in sorted(model.get("views", []), key=lambda item: item["view_id"]):
+        image_path = _join(split_root, view["image"])
+        face_id_map_path = _join(split_root, view["face_id_map"])
+        if not os.path.isfile(image_path) or not os.path.isfile(face_id_map_path):
+            continue
+
+        with Image.open(image_path) as image:
+            width, height = image.size
+
+        face_id_map = np.load(face_id_map_path)
+        annotations = []
+        for feature in features:
+            mask = np.isin(face_id_map, feature["face_ids"])
+            if not mask.any():
+                continue
+
+            rle = _encode_binary_mask(mask)
+            bbox = mask_util.toBbox(rle).tolist()
+            if bbox[2] <= 0 or bbox[3] <= 0:
+                continue
+
+            annotations.append(
+                {
+                    "iscrowd": 0,
+                    "category_id": feature["category_id"],
+                    "bbox": [float(v) for v in bbox],
+                    "bbox_mode": BoxMode.XYWH_ABS,
+                    "segmentation": rle,
+                }
+            )
+
+        records.append(
+            {
+                "file_name": image_path,
+                "height": height,
+                "width": width,
+                "model_id": model.get("model_id", ""),
+                "view_id": int(view.get("view_id", 0)),
+                "annotations": annotations,
+            }
+        )
+    return records
+
+
 def load_mfr_singleview_json(models_json, split_root):
     models_json = Path(models_json)
     split_root = str(split_root)
+    use_cache = os.getenv("MFR_SINGLEVIEW_CACHE", "0") == "1"
+    expected_meta = _cache_meta(models_json)
+    cache_file = _cache_file_for(models_json)
+    if use_cache:
+        cached = _load_cache(cache_file, expected_meta)
+        if cached is not None:
+            print(f"[OK] Loaded MFR single-view cache: {cache_file} ({len(cached)} images)", flush=True)
+            return cached
+
     with models_json.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
     dataset_dicts = []
     image_id = 0
     anno_id = 1
+    models = data.get("models", [])
+    log_period = int(os.getenv("MFR_SINGLEVIEW_LOG_PERIOD", "50"))
+    build_workers = int(os.getenv("MFR_SINGLEVIEW_BUILD_WORKERS", "8"))
+    start_time = time.time()
+    print(
+        f"[MFR single-view] Building dataset from {models_json}: {len(models)} models. "
+        f"This can take a while because masks are generated from face_id_maps. workers={build_workers}",
+        flush=True,
+    )
 
-    for model in data.get("models", []):
-        features = []
-        for feature in model.get("features", []):
-            category_id = int(feature["category_id"])
-            if category_id >= len(MFR_FEATURE_NAMES):
-                continue
-            features.append(
-                {
-                    "instance_id": int(feature["instance_id"]),
-                    "category_id": category_id,
-                    "face_ids": [int(face_id) for face_id in feature["face_ids"]],
-                }
-            )
+    def consume(iterator):
+        nonlocal image_id, anno_id
+        for model_idx, records in enumerate(iterator, start=1):
+            for record in records:
+                record["image_id"] = image_id
+                image_id += 1
+                for annotation in record["annotations"]:
+                    annotation["id"] = anno_id
+                    anno_id += 1
+                dataset_dicts.append(record)
 
-        for view in sorted(model.get("views", []), key=lambda item: item["view_id"]):
-            image_path = _join(split_root, view["image"])
-            face_id_map_path = _join(split_root, view["face_id_map"])
-            if not os.path.isfile(image_path) or not os.path.isfile(face_id_map_path):
-                continue
-
-            with Image.open(image_path) as image:
-                width, height = image.size
-
-            face_id_map = np.load(face_id_map_path)
-            annotations = []
-            for feature in features:
-                mask = np.isin(face_id_map, feature["face_ids"])
-                if not mask.any():
-                    continue
-
-                rle = _encode_binary_mask(mask)
-                bbox = mask_util.toBbox(rle).tolist()
-                if bbox[2] <= 0 or bbox[3] <= 0:
-                    continue
-
-                annotations.append(
-                    {
-                        "id": anno_id,
-                        "iscrowd": 0,
-                        "category_id": feature["category_id"],
-                        "bbox": [float(v) for v in bbox],
-                        "bbox_mode": BoxMode.XYWH_ABS,
-                        "segmentation": rle,
-                    }
+            if log_period > 0 and (model_idx == 1 or model_idx % log_period == 0 or model_idx == len(models)):
+                elapsed = time.time() - start_time
+                print(
+                    f"[MFR single-view] {models_json.parent.name}: "
+                    f"{model_idx}/{len(models)} models, {image_id} images, {anno_id - 1} annotations, "
+                    f"{elapsed:.1f}s",
+                    flush=True,
                 )
-                anno_id += 1
 
-            dataset_dicts.append(
-                {
-                    "file_name": image_path,
-                    "image_id": image_id,
-                    "height": height,
-                    "width": width,
-                    "model_id": model.get("model_id", ""),
-                    "view_id": int(view.get("view_id", 0)),
-                    "annotations": annotations,
-                }
-            )
-            image_id += 1
+    if build_workers > 1 and len(models) > 1:
+        with ThreadPoolExecutor(max_workers=build_workers) as executor:
+            consume(executor.map(lambda model: _model_to_records(model, split_root), models))
+    else:
+        consume(_model_to_records(model, split_root) for model in models)
 
+    if use_cache:
+        _save_cache(cache_file, expected_meta, dataset_dicts)
     return dataset_dicts
 
 
