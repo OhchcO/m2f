@@ -346,6 +346,7 @@ class MFRMultiViewDatasetMapper:
         dataset_dict["instances"] = []
         dataset_dict["file_names"] = []
         dataset_dict["face_id_map_names"] = []
+        dataset_dict["face_id_maps"] = []
 
         for image_path, face_id_map_path in paired_views:
             image = utils.read_image(image_path, format=self.image_format)
@@ -367,6 +368,11 @@ class MFRMultiViewDatasetMapper:
             dataset_dict["instances"].append(instances)
             dataset_dict["file_names"].append(image_path)
             dataset_dict["face_id_map_names"].append(face_id_map_path)
+            # Keep the augmented map as a model input for exact cross-view
+            # CAD-face correspondence fusion. Background remains -1.
+            dataset_dict["face_id_maps"].append(
+                torch.as_tensor(np.ascontiguousarray(face_id_map), dtype=torch.long)
+            )
 
         dataset_dict["length"] = len(dataset_dict["image"])
         return dataset_dict

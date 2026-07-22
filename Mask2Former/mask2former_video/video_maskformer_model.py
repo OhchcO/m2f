@@ -181,14 +181,28 @@ class VideoMaskFormer(nn.Module):
                         Each dict contains keys "id", "category_id", "isthing".
         """
         images = []
+        face_id_maps = []
         for video in batched_inputs:
             for frame in video["image"]:
                 images.append(frame.to(self.device))
+            if "face_id_maps" in video:
+                face_id_maps.extend(face_id_map.to(self.device) for face_id_map in video["face_id_maps"])
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         images = ImageList.from_tensors(images, self.size_divisibility)
 
+        if face_id_maps:
+            if len(face_id_maps) != len(images.image_sizes):
+                raise ValueError("face_id_maps must contain one map per video frame")
+            face_id_maps = ImageList.from_tensors(
+                face_id_maps, self.size_divisibility, pad_value=-1
+            ).tensor
+        else:
+            face_id_maps = None
+
         features = self.backbone(images.tensor)
-        outputs = self.sem_seg_head(features)
+        outputs = self.sem_seg_head(
+            features, face_id_maps=face_id_maps, num_frames=self.num_frames
+        )
 
         if self.training:
             # mask classification target

@@ -139,6 +139,19 @@ def render_encoded_views(step_data, output_dir, directions, progress=None):
     return encoded_dir, image_paths, mapping_path
 
 
+def decode_face_id_map(encoded_bgr, gb_to_fid):
+    """Recover training-compatible CAD face ids from an encoded render.
+
+    White background has no entry in ``gb_to_fid`` and remains ``-1``.
+    """
+    encoded_rgb = cv2.cvtColor(encoded_bgr, cv2.COLOR_BGR2RGB)
+    raw_gb = (encoded_rgb[:, :, 1].astype(np.uint16) << 8) | encoded_rgb[:, :, 2].astype(np.uint16)
+    face_id_map = np.full(raw_gb.shape, -1, dtype=np.int64)
+    for raw_id, face_id in gb_to_fid.items():
+        face_id_map[raw_gb == int(raw_id)] = int(face_id)
+    return face_id_map
+
+
 def load_video_predictor(m2f_root, config_path, weights_path, device):
     root = os.path.abspath(m2f_root)
     config_path = os.path.abspath(config_path)
@@ -375,11 +388,12 @@ def run_detectron2_multiview(
         raise RuntimeError("编码视图读取失败")
     if progress:
         progress(f"14 视角图片读取完成，用时 {_elapsed(read_start)}")
+    face_id_maps = [decode_face_id_map(frame, gb_to_fid) for frame in frames]
 
     if progress:
         progress("运行 14 视角视频推理")
     infer_start = time.perf_counter()
-    predictions = predictor(frames)
+    predictions = predictor(frames, face_id_maps=face_id_maps)
     if progress:
         progress(f"模型推理完成，用时 {_elapsed(infer_start)}")
     scores = list(predictions.get("pred_scores", []))

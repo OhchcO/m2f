@@ -13,6 +13,7 @@ from detectron2.modeling import SEM_SEG_HEADS_REGISTRY
 
 from ..transformer_decoder.maskformer_transformer_decoder import build_transformer_decoder
 from ..pixel_decoder.fpn import build_pixel_decoder
+from mask2former_video.modeling.face_feature_fusion import FaceFeatureFusion
 
 
 @SEM_SEG_HEADS_REGISTRY.register()
@@ -56,6 +57,7 @@ class MaskFormerHead(nn.Module):
         # extra parameters
         transformer_predictor: nn.Module,
         transformer_in_feature: str,
+        face_fusion: Optional[nn.Module] = None,
     ):
         """
         NOTE: this interface is experimental.
@@ -81,6 +83,7 @@ class MaskFormerHead(nn.Module):
         self.pixel_decoder = pixel_decoder
         self.predictor = transformer_predictor
         self.transformer_in_feature = transformer_in_feature
+        self.face_fusion = face_fusion
 
         self.num_classes = num_classes
 
@@ -96,6 +99,11 @@ class MaskFormerHead(nn.Module):
         else:
             transformer_predictor_in_channels = input_shape[cfg.MODEL.MASK_FORMER.TRANSFORMER_IN_FEATURE].channels
 
+        face_fusion = None
+        if cfg.MODEL.FACE_FUSION.ENABLED:
+            feature_channels = [cfg.MODEL.SEM_SEG_HEAD.MASK_DIM] + [transformer_predictor_in_channels] * 3
+            face_fusion = FaceFeatureFusion(feature_channels, cfg.MODEL.FACE_FUSION.INIT_GAMMA)
+
         return {
             "input_shape": {
                 k: v for k, v in input_shape.items() if k in cfg.MODEL.SEM_SEG_HEAD.IN_FEATURES
@@ -110,13 +118,20 @@ class MaskFormerHead(nn.Module):
                 transformer_predictor_in_channels,
                 mask_classification=True,
             ),
+            "face_fusion": face_fusion,
         }
 
-    def forward(self, features, mask=None):
-        return self.layers(features, mask)
+    def forward(self, features, mask=None, face_id_maps=None, num_frames=None):
+        return self.layers(features, mask, face_id_maps, num_frames)
 
-    def layers(self, features, mask=None):
+    def layers(self, features, mask=None, face_id_maps=None, num_frames=None):
         mask_features, transformer_encoder_features, multi_scale_features = self.pixel_decoder.forward_features(features)
+        if self.face_fusion is not None:
+            if face_id_maps is None or num_frames is None:
+                raise ValueError("face_id_maps and num_frames are required when FACE_FUSION is enabled")
+            mask_features, multi_scale_features = self.face_fusion(
+                mask_features, multi_scale_features, face_id_maps, num_frames
+            )
         if self.transformer_in_feature == "multi_scale_pixel_decoder":
             predictions = self.predictor(multi_scale_features, mask_features, mask)
         else:

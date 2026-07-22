@@ -8,6 +8,9 @@ MODEL:
     TRANSFORMER_DECODER_NAME: "VideoMultiScaleMaskedTransformerDecoder"
     TEST:
       TOPK_PER_VIDEO: 50
+  FACE_FUSION:
+    ENABLED: True
+    INIT_GAMMA: 0.0
 DATASETS:
   TRAIN: ("mfr_multiview_train",)
   TEST: ("mfr_multiview_val",)

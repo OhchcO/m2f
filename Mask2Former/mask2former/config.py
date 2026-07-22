@@ -29,6 +29,12 @@ def add_maskformer2_config(cfg):
     # mask_former model config
     cfg.MODEL.MASK_FORMER = CN()
 
+    # Disabled by default so non-video Mask2Former configurations retain their
+    # existing behavior. Video configs can opt in with rendered face-id maps.
+    cfg.MODEL.FACE_FUSION = CN()
+    cfg.MODEL.FACE_FUSION.ENABLED = False
+    cfg.MODEL.FACE_FUSION.INIT_GAMMA = 0.0
+
     # loss
     cfg.MODEL.MASK_FORMER.DEEP_SUPERVISION = True
     cfg.MODEL.MASK_FORMER.NO_OBJECT_WEIGHT = 0.1

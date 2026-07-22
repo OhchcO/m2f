@@ -355,6 +355,7 @@ def main():
             batched_inputs = [
                 {
                     "image": images,
+                    "face_id_maps": [torch.from_numpy(face_id_map).long() for face_id_map in face_id_maps],
                     "height": height,
                     "width": width,
                     "model_id": model_record["model_id"],
