@@ -106,6 +106,7 @@ class MaskFormerHead(nn.Module):
                 feature_channels,
                 cfg.MODEL.FACE_FUSION.INIT_GAMMA,
                 cfg.MODEL.FACE_FUSION.FUSE_MASK_FEATURES,
+                cfg.MODEL.FACE_FUSION.AGGREGATION,
             )
 
         return {

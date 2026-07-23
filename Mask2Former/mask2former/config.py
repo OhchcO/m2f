@@ -35,6 +35,7 @@ def add_maskformer2_config(cfg):
     cfg.MODEL.FACE_FUSION.ENABLED = False
     cfg.MODEL.FACE_FUSION.INIT_GAMMA = 0.0
     cfg.MODEL.FACE_FUSION.FUSE_MASK_FEATURES = True
+    cfg.MODEL.FACE_FUSION.AGGREGATION = "mean"
 
     # loss
     cfg.MODEL.MASK_FORMER.DEEP_SUPERVISION = True

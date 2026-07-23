@@ -60,3 +60,26 @@ def test_mask_features_can_be_excluded_while_multiscale_features_fuse():
     assert torch.equal(
         fused_scales[0], torch.tensor([[[[6.0]]], [[[10.0]]]])
     )
+
+
+def test_content_attention_prefers_the_more_informative_view_feature():
+    module = load_face_fusion_module()
+    fusion = module.FaceFeatureFusion(
+        feature_channels=[1], init_gamma=1.0, aggregation="content_attention"
+    )
+    scorer = fusion.attention_scorers[0]
+    with torch.no_grad():
+        scorer[0].weight.fill_(1.0)
+        scorer[0].bias.zero_()
+        scorer[2].weight.fill_(1.0)
+        scorer[2].bias.zero_()
+
+    # The two frames show one face with features 1 and 3. Content attention
+    # assigns a larger weight to the stronger second-view feature, therefore
+    # their shared message is greater than the arithmetic mean (2).
+    feature = torch.tensor([[[[1.0]]], [[[3.0]]]])
+    face_ids = torch.tensor([[[7]], [[7]]])
+    fused_mask, _ = fusion(feature, [], face_ids, num_frames=2)
+
+    assert fused_mask[0, 0, 0, 0] > 3.0
+    assert fused_mask[1, 0, 0, 0] > 5.0

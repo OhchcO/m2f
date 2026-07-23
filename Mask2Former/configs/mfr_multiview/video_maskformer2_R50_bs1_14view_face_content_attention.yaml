@@ -1,0 +1,6 @@
+_BASE_: video_maskformer2_R50_bs1_14view.yaml
+MODEL:
+  FACE_FUSION:
+    # Scheme 4a: pool each face per view, then learn content-dependent view
+    # weights before broadcasting the shared face feature back to all views.
+    AGGREGATION: "content_attention"
