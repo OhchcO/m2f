@@ -149,6 +149,7 @@ def resolve_path(root, path):
 def read_video_inputs(model_record, val_dir, input_format):
     images = []
     face_id_maps = []
+    camera_directions = []
     views = sorted(model_record["views"], key=lambda item: item["view_id"])
     for view in views:
         image_path = resolve_path(val_dir, view["image"])
@@ -159,7 +160,11 @@ def read_video_inputs(model_record, val_dir, input_format):
         image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB) if input_format == "RGB" else image_bgr
         images.append(torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1))).float())
         face_id_maps.append(np.load(face_map_path).astype(np.int32))
-    return images, face_id_maps
+        direction = view.get("camera", {}).get("direction")
+        if not isinstance(direction, list) or len(direction) != 3:
+            raise ValueError(f"Missing camera.direction for {model_record['model_id']} view {view['view_id']}")
+        camera_directions.append(torch.tensor(direction, dtype=torch.float32))
+    return images, face_id_maps, camera_directions
 
 
 def build_gt_faces(model_record, face_id_maps):
@@ -350,12 +355,13 @@ def main():
     all_results = []
     with torch.no_grad():
         for model_record in tqdm(models, desc="Evaluating MFR multiview"):
-            images, face_id_maps = read_video_inputs(model_record, args.val_dir, cfg.INPUT.FORMAT)
+            images, face_id_maps, camera_directions = read_video_inputs(model_record, args.val_dir, cfg.INPUT.FORMAT)
             height, width = images[0].shape[-2:]
             batched_inputs = [
                 {
                     "image": images,
                     "face_id_maps": [torch.from_numpy(face_id_map).long() for face_id_map in face_id_maps],
+                    "camera_directions": camera_directions,
                     "height": height,
                     "width": width,
                     "model_id": model_record["model_id"],

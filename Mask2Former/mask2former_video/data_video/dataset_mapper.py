@@ -335,9 +335,12 @@ class MFRMultiViewDatasetMapper:
 
         file_names = dataset_dict.pop("file_names")
         face_id_map_names = dataset_dict.pop("face_id_map_names")
+        camera_directions = dataset_dict.pop("camera_directions", None)
         features = dataset_dict.pop("features")
 
-        paired_views = list(zip(file_names, face_id_map_names))
+        if camera_directions is None:
+            raise ValueError("MFR multi-view samples require camera_directions")
+        paired_views = list(zip(file_names, face_id_map_names, camera_directions))
         paired_views = sorted(paired_views, key=lambda item: item[0])
         if self.is_train:
             paired_views = paired_views[: self.sampling_frame_num]
@@ -347,8 +350,9 @@ class MFRMultiViewDatasetMapper:
         dataset_dict["file_names"] = []
         dataset_dict["face_id_map_names"] = []
         dataset_dict["face_id_maps"] = []
+        dataset_dict["camera_directions"] = []
 
-        for image_path, face_id_map_path in paired_views:
+        for image_path, face_id_map_path, camera_direction in paired_views:
             image = utils.read_image(image_path, format=self.image_format)
             # Detectron2's ResizeTransform uses torch.interpolate for non-uint8
             # segmentations, and PyTorch does not support nearest resize for int
@@ -373,6 +377,7 @@ class MFRMultiViewDatasetMapper:
             dataset_dict["face_id_maps"].append(
                 torch.as_tensor(np.ascontiguousarray(face_id_map), dtype=torch.long)
             )
+            dataset_dict["camera_directions"].append(torch.tensor(camera_direction, dtype=torch.float32))
 
         dataset_dict["length"] = len(dataset_dict["image"])
         return dataset_dict

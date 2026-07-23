@@ -22,6 +22,7 @@ class FaceFeatureFusion(nn.Module):
         init_gamma: float = 0.0,
         fuse_mask_features: bool = True,
         aggregation: str = "mean",
+        use_view_direction: bool = False,
     ):
         super().__init__()
         if aggregation not in {"mean", "content_attention"}:
@@ -31,10 +32,12 @@ class FaceFeatureFusion(nn.Module):
         self.gammas = nn.Parameter(torch.full((len(feature_channels),), init_gamma))
         self.fuse_mask_features = fuse_mask_features
         self.aggregation = aggregation
+        self.use_view_direction = use_view_direction
+        self.feature_channels = feature_channels
         self.attention_scorers = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.Linear(channels, max(channels // 4, 32)),
+                    nn.Linear(channels * (2 if use_view_direction else 1), max(channels // 4, 32)),
                     nn.ReLU(),
                     nn.Linear(max(channels // 4, 32), 1),
                 )
@@ -46,6 +49,16 @@ class FaceFeatureFusion(nn.Module):
         for scorer in self.attention_scorers:
             nn.init.zeros_(scorer[-1].weight)
             nn.init.zeros_(scorer[-1].bias)
+        self.direction_encoders = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(3, max(channels // 4, 32)),
+                    nn.ReLU(),
+                    nn.Linear(max(channels // 4, 32), channels),
+                )
+                for channels in feature_channels
+            ]
+        )
 
     @staticmethod
     def _resize_face_ids(face_id_maps: Tensor, height: int, width: int) -> Tensor:
@@ -62,12 +75,17 @@ class FaceFeatureFusion(nn.Module):
         num_frames: int,
         gamma: Tensor,
         attention_scorer: nn.Module,
+        direction_encoder: nn.Module,
+        camera_directions: Tensor = None,
     ) -> Tensor:
         bt, channels, height, width = features.shape
         if bt % num_frames != 0:
             raise ValueError(f"feature batch {bt} is not divisible by num_frames={num_frames}")
         if face_id_maps.shape[0] != bt:
             raise ValueError("face_id_maps and features must have the same flattened video batch size")
+        if self.use_view_direction:
+            if camera_directions is None or camera_directions.shape != (bt, 3):
+                raise ValueError("camera_directions must have shape [batch*num_frames, 3] when enabled")
 
         face_ids = self._resize_face_ids(face_id_maps, height, width)
         batch_size = bt // num_frames
@@ -118,7 +136,14 @@ class FaceFeatureFusion(nn.Module):
             attention_features = view_features.float()
             # CUDA autocast can still return fp16 from Linear even for fp32
             # inputs, so force logits back to fp32 before exp/index_add.
-            logits = attention_scorer(attention_features).squeeze(1).float()
+            if self.use_view_direction:
+                view_directions = camera_directions.view(batch_size, num_frames, 3)
+                view_directions = view_directions[unique_view_keys[:, 0], unique_view_keys[:, 1]]
+                direction_features = direction_encoder(view_directions.float()).float()
+                attention_input = torch.cat((attention_features, direction_features), dim=1)
+            else:
+                attention_input = attention_features
+            logits = attention_scorer(attention_input).squeeze(1).float()
             face_max = logits.new_full((unique_face_keys.shape[0],), float("-inf"))
             face_max.scatter_reduce_(0, view_to_face, logits, reduce="amax", include_self=True)
             unnormalized = torch.exp(logits - face_max[view_to_face])
@@ -144,15 +169,16 @@ class FaceFeatureFusion(nn.Module):
         multi_scale_features: List[Tensor],
         face_id_maps: Tensor,
         num_frames: int,
+        camera_directions: Tensor = None,
     ) -> Tuple[Tensor, List[Tensor]]:
         fused_mask = (
-            self._fuse_one(mask_features, face_id_maps, num_frames, self.gammas[0], self.attention_scorers[0])
+            self._fuse_one(mask_features, face_id_maps, num_frames, self.gammas[0], self.attention_scorers[0], self.direction_encoders[0], camera_directions)
             if self.fuse_mask_features
             else mask_features
         )
         fused_scales = [
             self._fuse_one(
-                feature, face_id_maps, num_frames, self.gammas[index], self.attention_scorers[index]
+                feature, face_id_maps, num_frames, self.gammas[index], self.attention_scorers[index], self.direction_encoders[index], camera_directions
             )
             for index, feature in enumerate(multi_scale_features, start=1)
         ]

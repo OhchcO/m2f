@@ -182,11 +182,14 @@ class VideoMaskFormer(nn.Module):
         """
         images = []
         face_id_maps = []
+        camera_directions = []
         for video in batched_inputs:
             for frame in video["image"]:
                 images.append(frame.to(self.device))
             if "face_id_maps" in video:
                 face_id_maps.extend(face_id_map.to(self.device) for face_id_map in video["face_id_maps"])
+            if "camera_directions" in video:
+                camera_directions.extend(direction.to(self.device) for direction in video["camera_directions"])
         images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         images = ImageList.from_tensors(images, self.size_divisibility)
 
@@ -198,10 +201,16 @@ class VideoMaskFormer(nn.Module):
             ).tensor
         else:
             face_id_maps = None
+        if camera_directions:
+            if len(camera_directions) != len(images.image_sizes):
+                raise ValueError("camera_directions must contain one direction per video frame")
+            camera_directions = torch.stack(camera_directions)
+        else:
+            camera_directions = None
 
         features = self.backbone(images.tensor)
         outputs = self.sem_seg_head(
-            features, face_id_maps=face_id_maps, num_frames=self.num_frames
+            features, face_id_maps=face_id_maps, num_frames=self.num_frames, camera_directions=camera_directions
         )
 
         if self.training:

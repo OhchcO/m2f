@@ -54,6 +54,12 @@ def load_mfr_multiview_json(models_json, split_root):
         views = sorted(model.get("views", []), key=lambda item: item["view_id"])
         file_names = [_join_dataset_path(split_root, view["image"]) for view in views]
         face_id_map_names = [_join_dataset_path(split_root, view["face_id_map"]) for view in views]
+        camera_directions = []
+        for view in views:
+            direction = view.get("camera", {}).get("direction")
+            if not isinstance(direction, list) or len(direction) != 3:
+                raise ValueError(f"Missing camera.direction for model {model.get('model_id')} view {view.get('view_id')}")
+            camera_directions.append([float(value) for value in direction])
 
         if not file_names:
             continue
@@ -87,6 +93,7 @@ def load_mfr_multiview_json(models_json, split_root):
             {
                 "file_names": file_names,
                 "face_id_map_names": face_id_map_names,
+                "camera_directions": camera_directions,
                 "height": height,
                 "width": width,
                 "length": len(views),

@@ -83,3 +83,22 @@ def test_content_attention_prefers_the_more_informative_view_feature():
 
     assert fused_mask[0, 0, 0, 0] > 3.0
     assert fused_mask[1, 0, 0, 0] > 5.0
+
+
+def test_content_attention_accepts_per_view_camera_directions():
+    module = load_face_fusion_module()
+    fusion = module.FaceFeatureFusion(
+        feature_channels=[1],
+        init_gamma=1.0,
+        aggregation="content_attention",
+        use_view_direction=True,
+    )
+    feature = torch.tensor([[[[1.0]]], [[[3.0]]]])
+    face_ids = torch.tensor([[[7]], [[7]]])
+    directions = torch.tensor([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]])
+
+    fused_mask, _ = fusion(
+        feature, [], face_ids, num_frames=2, camera_directions=directions
+    )
+
+    assert fused_mask.shape == feature.shape

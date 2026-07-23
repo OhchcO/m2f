@@ -1,0 +1,6 @@
+_BASE_: video_maskformer2_R50_bs1_14view_face_content_attention.yaml
+MODEL:
+  FACE_FUSION:
+    # Scheme 4b: content-attention view weighting conditioned on the rendered
+    # camera observation direction (dx, dy, dz).
+    USE_VIEW_DIRECTION: True

@@ -393,7 +393,7 @@ def run_detectron2_multiview(
     if progress:
         progress("运行 14 视角视频推理")
     infer_start = time.perf_counter()
-    predictions = predictor(frames, face_id_maps=face_id_maps)
+    predictions = predictor(frames, face_id_maps=face_id_maps, camera_directions=directions)
     if progress:
         progress(f"模型推理完成，用时 {_elapsed(infer_start)}")
     scores = list(predictions.get("pred_scores", []))

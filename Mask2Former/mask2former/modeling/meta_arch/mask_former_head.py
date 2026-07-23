@@ -107,6 +107,7 @@ class MaskFormerHead(nn.Module):
                 cfg.MODEL.FACE_FUSION.INIT_GAMMA,
                 cfg.MODEL.FACE_FUSION.FUSE_MASK_FEATURES,
                 cfg.MODEL.FACE_FUSION.AGGREGATION,
+                cfg.MODEL.FACE_FUSION.USE_VIEW_DIRECTION,
             )
 
         return {
@@ -126,16 +127,16 @@ class MaskFormerHead(nn.Module):
             "face_fusion": face_fusion,
         }
 
-    def forward(self, features, mask=None, face_id_maps=None, num_frames=None):
-        return self.layers(features, mask, face_id_maps, num_frames)
+    def forward(self, features, mask=None, face_id_maps=None, num_frames=None, camera_directions=None):
+        return self.layers(features, mask, face_id_maps, num_frames, camera_directions)
 
-    def layers(self, features, mask=None, face_id_maps=None, num_frames=None):
+    def layers(self, features, mask=None, face_id_maps=None, num_frames=None, camera_directions=None):
         mask_features, transformer_encoder_features, multi_scale_features = self.pixel_decoder.forward_features(features)
         if self.face_fusion is not None:
             if face_id_maps is None or num_frames is None:
                 raise ValueError("face_id_maps and num_frames are required when FACE_FUSION is enabled")
             mask_features, multi_scale_features = self.face_fusion(
-                mask_features, multi_scale_features, face_id_maps, num_frames
+                mask_features, multi_scale_features, face_id_maps, num_frames, camera_directions
             )
         if self.transformer_in_feature == "multi_scale_pixel_decoder":
             predictions = self.predictor(multi_scale_features, mask_features, mask)

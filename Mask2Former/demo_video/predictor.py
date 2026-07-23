@@ -92,7 +92,7 @@ class VideoPredictor(DefaultPredictor):
         inputs = cv2.imread("input.jpg")
         outputs = pred(inputs)
     """
-    def __call__(self, frames, face_id_maps=None):
+    def __call__(self, frames, face_id_maps=None, camera_directions=None):
         """
         Args:
             original_image (np.ndarray): an image of shape (H, W, C) (in BGR order).
@@ -106,6 +106,8 @@ class VideoPredictor(DefaultPredictor):
             input_face_id_maps = []
             if face_id_maps is not None and len(face_id_maps) != len(frames):
                 raise ValueError("face_id_maps must contain one map per input frame")
+            if camera_directions is not None and len(camera_directions) != len(frames):
+                raise ValueError("camera_directions must contain one direction per input frame")
             for index, original_image in enumerate(frames):
                 # Apply pre-processing to image.
                 if self.input_format == "RGB":
@@ -126,6 +128,10 @@ class VideoPredictor(DefaultPredictor):
             inputs = {"image": input_frames, "height": height, "width": width}
             if face_id_maps is not None:
                 inputs["face_id_maps"] = input_face_id_maps
+            if camera_directions is not None:
+                inputs["camera_directions"] = [
+                    torch.as_tensor(direction, dtype=torch.float32) for direction in camera_directions
+                ]
             predictions = self.model([inputs])
             return predictions
 
