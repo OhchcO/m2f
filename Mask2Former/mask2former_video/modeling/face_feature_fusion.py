@@ -112,7 +112,11 @@ class FaceFeatureFusion(nn.Module):
             unique_face_keys, view_to_face = torch.unique(
                 unique_view_keys[:, (0, 2)], dim=0, return_inverse=True
             )
-            logits = attention_scorer(view_features).squeeze(1)
+            # AMP may keep input feature maps in fp16 while attention ops
+            # promote exp/softmax intermediates to fp32. Keep the entire
+            # view-weight calculation and weighted accumulation in fp32.
+            attention_features = view_features.float()
+            logits = attention_scorer(attention_features).squeeze(1)
             face_max = logits.new_full((unique_face_keys.shape[0],), float("-inf"))
             face_max.scatter_reduce_(0, view_to_face, logits, reduce="amax", include_self=True)
             unnormalized = torch.exp(logits - face_max[view_to_face])
@@ -120,11 +124,13 @@ class FaceFeatureFusion(nn.Module):
             face_denominators.index_add_(0, view_to_face, unnormalized)
             view_weights = unnormalized / face_denominators[view_to_face].clamp_min(1e-12)
 
-            weighted_face_features = view_features.new_zeros((unique_face_keys.shape[0], channels))
-            weighted_face_features.index_add_(0, view_to_face, view_features * view_weights.unsqueeze(1))
+            weighted_face_features = attention_features.new_zeros((unique_face_keys.shape[0], channels))
+            weighted_face_features.index_add_(
+                0, view_to_face, attention_features * view_weights.unsqueeze(1)
+            )
             # Map every token's (model, face) group to its weighted shared feature.
             _, token_to_face = torch.unique(face_keys, dim=0, return_inverse=True)
-            shared_features = weighted_face_features[token_to_face]
+            shared_features = weighted_face_features[token_to_face].to(valid_features.dtype)
 
         fused_tokens = token_features.clone()
         fused_tokens[valid] = valid_features + gamma * shared_features
