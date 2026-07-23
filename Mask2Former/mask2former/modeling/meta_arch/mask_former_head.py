@@ -102,7 +102,11 @@ class MaskFormerHead(nn.Module):
         face_fusion = None
         if cfg.MODEL.FACE_FUSION.ENABLED:
             feature_channels = [cfg.MODEL.SEM_SEG_HEAD.MASK_DIM] + [transformer_predictor_in_channels] * 3
-            face_fusion = FaceFeatureFusion(feature_channels, cfg.MODEL.FACE_FUSION.INIT_GAMMA)
+            face_fusion = FaceFeatureFusion(
+                feature_channels,
+                cfg.MODEL.FACE_FUSION.INIT_GAMMA,
+                cfg.MODEL.FACE_FUSION.FUSE_MASK_FEATURES,
+            )
 
         return {
             "input_shape": {

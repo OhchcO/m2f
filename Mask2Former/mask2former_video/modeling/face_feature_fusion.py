@@ -16,11 +16,17 @@ class FaceFeatureFusion(nn.Module):
     and is left untouched.
     """
 
-    def __init__(self, feature_channels: List[int], init_gamma: float = 0.0):
+    def __init__(
+        self,
+        feature_channels: List[int],
+        init_gamma: float = 0.0,
+        fuse_mask_features: bool = True,
+    ):
         super().__init__()
         # The values are deliberately scalar gates: gamma=0 preserves the
         # baseline exactly while training can enable each resolution separately.
         self.gammas = nn.Parameter(torch.full((len(feature_channels),), init_gamma))
+        self.fuse_mask_features = fuse_mask_features
 
     @staticmethod
     def _resize_face_ids(face_id_maps: Tensor, height: int, width: int) -> Tensor:
@@ -73,7 +79,11 @@ class FaceFeatureFusion(nn.Module):
         face_id_maps: Tensor,
         num_frames: int,
     ) -> Tuple[Tensor, List[Tensor]]:
-        fused_mask = self._fuse_one(mask_features, face_id_maps, num_frames, self.gammas[0])
+        fused_mask = (
+            self._fuse_one(mask_features, face_id_maps, num_frames, self.gammas[0])
+            if self.fuse_mask_features
+            else mask_features
+        )
         fused_scales = [
             self._fuse_one(feature, face_id_maps, num_frames, self.gammas[index])
             for index, feature in enumerate(multi_scale_features, start=1)

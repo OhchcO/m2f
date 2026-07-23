@@ -7,6 +7,7 @@ set -euo pipefail
 CONDA_ENV="${CONDA_ENV:-m2f}"
 PROJECT_DIR="${PROJECT_DIR:-/data/m2f}"
 MASK2FORMER_DIR="${MASK2FORMER_DIR:-${PROJECT_DIR}/Mask2Former}"
+CONFIG_FILE="${CONFIG_FILE:-${MASK2FORMER_DIR}/configs/mfr_multiview/video_maskformer2_R50_bs1_14view.yaml}"
 DATASET_DIR="${DATASET_DIR:-/hy-tmp/datasets/MFRInstSegM2F_2100}"
 DATASET_NAME="${DATASET_NAME:-$(basename "${DATASET_DIR}")}"
 BASE_WEIGHTS="${BASE_WEIGHTS:-}"
@@ -40,6 +41,7 @@ export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-${GPU_ID:-0}}"
 
 echo "Fine-tuning Face-ID mean fusion"
 echo "  dataset:      ${MFR_MULTIVIEW_DATASET}"
+echo "  config:       ${CONFIG_FILE}"
 echo "  base weights: ${BASE_WEIGHTS}"
 echo "  output:       ${OUTPUT_DIR}"
 echo "  max iter:     ${MAX_ITER}"
@@ -47,7 +49,7 @@ echo "  base lr:      ${BASE_LR}"
 echo "  GPU:          ${CUDA_VISIBLE_DEVICES}"
 
 python train_net_video.py \
-  --config-file configs/mfr_multiview/video_maskformer2_R50_bs1_14view.yaml \
+  --config-file "${CONFIG_FILE}" \
   --num-gpus 1 \
   SOLVER.IMS_PER_BATCH 1 \
   SOLVER.MAX_ITER "${MAX_ITER}" \

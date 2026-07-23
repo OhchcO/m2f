@@ -41,3 +41,22 @@ def test_background_is_unchanged_and_zero_gate_is_identity():
     fused_mask, _ = fusion(feature, [], face_ids, num_frames=2)
 
     assert torch.equal(fused_mask, feature)
+
+
+def test_mask_features_can_be_excluded_while_multiscale_features_fuse():
+    module = load_face_fusion_module()
+    fusion = module.FaceFeatureFusion(
+        feature_channels=[1, 1], init_gamma=1.0, fuse_mask_features=False
+    )
+    mask_feature = torch.tensor([[[[2.0]]], [[[6.0]]]])
+    multi_scale_feature = torch.tensor([[[[2.0]]], [[[6.0]]]])
+    face_ids = torch.tensor([[[7]], [[7]]])
+
+    fused_mask, fused_scales = fusion(
+        mask_feature, [multi_scale_feature], face_ids, num_frames=2
+    )
+
+    assert torch.equal(fused_mask, mask_feature)
+    assert torch.equal(
+        fused_scales[0], torch.tensor([[[[6.0]]], [[[10.0]]]])
+    )

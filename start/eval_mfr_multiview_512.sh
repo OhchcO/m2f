@@ -17,6 +17,7 @@ set -euo pipefail
 CONDA_ENV="${CONDA_ENV:-m2f}"
 PROJECT_DIR="${PROJECT_DIR:-/data/m2f}"
 MASK2FORMER_DIR="${MASK2FORMER_DIR:-${PROJECT_DIR}/Mask2Former}"
+CONFIG_FILE="${CONFIG_FILE:-${MASK2FORMER_DIR}/configs/mfr_multiview/video_maskformer2_R50_bs1_14view.yaml}"
 DATASET_DIR="${DATASET_DIR:-/mnt/e/wsl/datasets/MFRInstSegM2F_2100}"
 RESULT_DIR="${RESULT_DIR:-/mnt/e/wsl/result/MFRInstSegM2F_2100_mul}"
 WEIGHTS="${WEIGHTS:-${RESULT_DIR}/model_0089999.pth}"
@@ -40,7 +41,7 @@ export MFR_MULTIVIEW_DATASET="${DATASET_DIR}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-${GPU_ID:-0}}"
 
 python "${PROJECT_DIR}/new_add/eval_mfr_multiview.py" \
-  --config_file "${MASK2FORMER_DIR}/configs/mfr_multiview/video_maskformer2_R50_bs1_14view.yaml" \
+  --config_file "${CONFIG_FILE}" \
   --weights "${WEIGHTS}" \
   --val_dir "${DATASET_DIR}/val" \
   --output_dir "${OUTPUT_DIR}" \

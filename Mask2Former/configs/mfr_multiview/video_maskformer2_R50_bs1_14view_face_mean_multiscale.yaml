@@ -1,0 +1,6 @@
+_BASE_: video_maskformer2_R50_bs1_14view.yaml
+MODEL:
+  FACE_FUSION:
+    # Preserve each view's high-resolution mask detail while sharing only
+    # multi-scale semantic features across exact CAD-face correspondences.
+    FUSE_MASK_FEATURES: False
