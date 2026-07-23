@@ -116,7 +116,9 @@ class FaceFeatureFusion(nn.Module):
             # promote exp/softmax intermediates to fp32. Keep the entire
             # view-weight calculation and weighted accumulation in fp32.
             attention_features = view_features.float()
-            logits = attention_scorer(attention_features).squeeze(1)
+            # CUDA autocast can still return fp16 from Linear even for fp32
+            # inputs, so force logits back to fp32 before exp/index_add.
+            logits = attention_scorer(attention_features).squeeze(1).float()
             face_max = logits.new_full((unique_face_keys.shape[0],), float("-inf"))
             face_max.scatter_reduce_(0, view_to_face, logits, reduce="amax", include_self=True)
             unnormalized = torch.exp(logits - face_max[view_to_face])
